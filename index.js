@@ -11,12 +11,14 @@ class Api {
 		this.postsSelector = 'posts';
 		this.pagesSelector = 'pages';
 		this.categoriesSelector = 'categories';
+		this.mediaSelector = 'media';
 		this.emptyConst = 'empty';
 		this.dataDirName = '/storage/';
 		this.dataDir = `${this.rootDir}${this.dataDirName}`;
 		this.dataPostsPath = `${this.dataDir}${this.postsSelector}`;
 		this.dataPagesPath = `${this.dataDir}${this.pagesSelector}`;
 		this.dataCategoriesPath = `${this.dataDir}${this.categoriesSelector}`;
+		this.dataMediaPath = `${this.dataDir}${this.mediaSelector}`;
 		this.getArguments();
 		this.auth = (this.auth);
 		this.wp = new WPAPI({
@@ -79,12 +81,13 @@ class Api {
 	}
 
 	createDirs(){
-		let statsPostsDir, statsPagesDir, statsCategoriesDir, statsDataDir  = false;
+		let statsPostsDir, statsPagesDir, statsCategoriesDir, statsDataDir, statsMediaDir  = false;
 		try {	
 			statsDataDir = fs.statSync(this.dataDir);
 			statsPostsDir = fs.statSync(this.dataPostsPath);
 			statsPagesDir = fs.statSync(this.dataPagesPath);
 			statsCategoriesDir = fs.statSync(this.dataCategoriesPath);
+			statsMediaDir = fs.statSync(this.dataMediaPath);
 		}
 		catch (e){}
 		if (!statsDataDir) {
@@ -99,11 +102,15 @@ class Api {
 		if (!statsCategoriesDir) {
 			fs.mkdirSync(this.dataCategoriesPath);
 		}
+		if (!statsMediaDir) {
+			fs.mkdirSync(this.dataMediaPath);
+		}
 	}
 
 	clearDirs(selector){
 		let dir = (selector === this.postsSelector)? this.dataPostsPath : this.dataPagesPath;
 		dir = (selector === this.categoriesSelector)? this.dataCategoriesPath : dir;
+		dir = (selector === this.mediaSelector)? this.dataMediaPath : dir;
 		const postDirItems = fs.readdir(dir, (err, items) => {
 			if (err){
 				console.log(err);
@@ -117,6 +124,7 @@ class Api {
 	
 	dataFill(selector, data) {
 		this.itemPages = [];
+		const context = this;
 		data.map(item => {
 			if (selector === this.postsSelector || selector === this.pagesSelector) {
 				this.itemPages = {
@@ -144,6 +152,28 @@ class Api {
 					_links: item._links,
 					error: 0
 				};
+			}
+			const media = item._links['wp:featuredmedia'];
+			saveMedia();
+			function saveMedia() {
+				if (media) {
+					let prefixImage = item.type;
+					const id = item.id;
+					media.map(item => {
+						let indexMedia = item.href.match(/\d+$/);
+						indexMedia = (indexMedia)? indexMedia[0] : '0000';
+						prefixImage += `_${id}_image_${indexMedia}`;
+						request(item.href, function(error, response, body) {
+							const imageHref = JSON.parse(body).guid.rendered;
+							let imageType = imageHref.match(/\.\w{3}$/);
+							imageType = (imageType)? imageType[0] : '.jpg';
+							request(imageHref, {encoding: 'binary'}, function(err, resp, b) {
+								const file = `${context.dataMediaPath}${prefixImage}${imageType}`;
+								fs.writeFileSync(file, b, 'binary');
+							});
+						});
+					});
+				}	
 			}
 			switch(selector){
 				case this.pagesSelector: 
