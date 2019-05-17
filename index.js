@@ -168,7 +168,7 @@ class Api {
 							let imageType = imageHref.match(/\.\w{3}$/);
 							imageType = (imageType)? imageType[0] : '.jpg';
 							request(imageHref, {encoding: 'binary'}, function(err, resp, b) {
-								const file = `${context.dataMediaPath}${prefixImage}${imageType}`;
+								const file = `${context.dataMediaPath}/${prefixImage}${imageType}`;
 								fs.writeFileSync(file, b, 'binary');
 							});
 						});
@@ -180,17 +180,36 @@ class Api {
 					this.itemPages.parent = item.parent;
 					this.itemPages.menu_order = item.menu_order;
 					fs.writeFileSync(`${this.dataPagesPath}/page_${item.id}.json`, JSON.stringify(this.itemPages));
+					let parent = null;
+					if (item.parent) {
+						parent = item.parent;
+					}
+					this.titles.push({
+						id: item.id,
+						title: item.title.rendered,
+						parent: parent
+					});
 					this.pages.push(item.id);
-					this.pages = this.sortFiles(this.pages);
 					break;
 				case this.postsSelector:
 					this.itemPages.sticky = item.sticky;
 					this.itemPages.format = item.format;
 					this.itemPages.tags = item.tags;
 					this.itemPages.categories = item.categories;
-					fs.writeFileSync(`${this.dataPostsPath}/post_${item.id}.json`, JSON.stringify(this.itemPages));
-					this.posts.push(item.id);
-					this.posts = this.sortFiles(this.posts);
+					if (item.sticky && !this.firstId) {
+						this.firstId = item.id;
+						this.firstSlug = item.slug;
+						fs.writeFileSync(`${this.dataPostsPath}/post_home.json`, JSON.stringify(this.itemPages));
+					}
+					else {
+						fs.writeFileSync(`${this.dataPostsPath}/post_${item.id}.json`, JSON.stringify(this.itemPages));
+						this.posts.push(item.id);
+					}
+					if (item.sticky && this.firstId) {
+						if (item.id !== this.firstId) {
+							console.warn(`[Warning] Saving post witn id: <${item.id}> and slug: <${item.slug}> as home page post is ignored! Because post with id: <${this.firstId}> and slug: <${this.firstSlug}> are saved. Sorry promotion of only one post is currently supported, and this post is home page`);
+						}
+					}
 					break;
 				case this.categoriesSelector:
 					const category = {
@@ -208,12 +227,14 @@ class Api {
 					};
 					fs.writeFileSync(`${this.dataCategoriesPath}/category_${item.id}.json`, JSON.stringify(category));
 					this.categories.push(item.id);
-					this.categories = this.sortFiles(this.categories);
 					break;
 				default:
 					break;
 			}
 		});
+		this.pages = (this.pages)? this.sortFiles(this.pages) : this.pages;
+		this.categories = (this.categories)? this.sortFiles(this.categories) : this.categories;
+		this.posts = (this.posts)? this.sortFiles(this.posts) : this.posts;
 		fs.writeFileSync(`${this.dataDir}posts.json`, JSON.stringify({
 			host: this.host, 
 			items: this.posts,
@@ -222,6 +243,8 @@ class Api {
 		fs.writeFileSync(`${this.dataDir}pages.json`, JSON.stringify({
 			host: this.host,
 			items: this.pages,
+			hierarchy: this.hierarchy,
+			titles: this.titles,
 			name: 'PAGES_LIST'
 		}));	
 		fs.writeFileSync(`${this.dataDir}categories.json`, JSON.stringify({
@@ -233,18 +256,20 @@ class Api {
 
 	getPages() {
 		const context = this;
-		this.wp.pages().get(function(err, data) {
+		this.wp.pages().perPage(100).get(function(err, data) {
 			if (err) {
 				console.error(err);
 			}
 			context.pages = [];
+			context.hierarchy = [];
+			context.titles = [];
 			context.dataFill(context.pagesSelector, data);
 		});
 	}
 
 	getPosts() {
 		const context = this;
-		this.wp.posts().get(function(err, data) {
+		this.wp.posts().perPage(100).get(function(err, data) {
 			if (err){
 				console.log(err);
 			}
@@ -255,7 +280,7 @@ class Api {
 
 	getCategories() {
 		const context = this;
-		this.wp.categories().get(function(err, data) {
+		this.wp.categories().perPage(100).get(function(err, data) {
 			if (err) {
 				console.log(err);
 			}
