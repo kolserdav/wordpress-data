@@ -207,7 +207,7 @@ class Api {
 					}
 					if (item.sticky && this.firstId) {
 						if (item.id !== this.firstId) {
-							console.warn(`[Warning] Saving post witn id: <${item.id}> and slug: <${item.slug}> as home page post is ignored! Because post with id: <${this.firstId}> and slug: <${this.firstSlug}> are saved. Sorry promotion of only one post is currently supported, and this post is home page`);
+							console.warn(`[Warning] Saving post witn id: <${item.id}> and slug: <${item.slug}> as home page post is ignored! Because post with id: <${this.firstId}> and slug: <${this.firstSlug}> are saved. Promotion of only one post is currently supported, and this post is home page`);
 						}
 					}
 					break;
@@ -232,26 +232,64 @@ class Api {
 					break;
 			}
 		});
-		this.pages = (this.pages)? this.sortFiles(this.pages) : this.pages;
-		this.categories = (this.categories)? this.sortFiles(this.categories) : this.categories;
-		this.posts = (this.posts)? this.sortFiles(this.posts) : this.posts;
-		fs.writeFileSync(`${this.dataDir}posts.json`, JSON.stringify({
-			host: this.host, 
-			items: this.posts,
-			name: 'POSTS_LIST'
-		}));
-		fs.writeFileSync(`${this.dataDir}pages.json`, JSON.stringify({
-			host: this.host,
-			items: this.pages,
-			hierarchy: this.hierarchy,
-			titles: this.titles,
-			name: 'PAGES_LIST'
-		}));	
-		fs.writeFileSync(`${this.dataDir}categories.json`, JSON.stringify({
-			host: this.host,
-			items: this.categories,
-			name: 'CATEGORIES_LIST'
-		}))
+		switch(selector) {
+			case this.pagesSelector:
+				this.indexArray = {};
+				this.titles.map((item, index) => {
+					this.indexArray[item.id] = index;
+					this.hierarchy.push({
+						id: item.id,
+						title: item.title,
+						parent: item.parent,
+						children: []
+					});
+				});
+				this.titles.map((item, index, array) => {
+					if (item.parent !== null)	{
+						const i = this.indexArray[item.parent];
+						let children = [];
+						if (this.hierarchy[i].children.length !== 0) {
+							this.hierarchy[i].children.push(item.id);
+							children = this.hierarchy[i].children;
+						}
+						else {
+							children.push(item.id);
+						}
+						this.hierarchy[i] = {
+							id: this.hierarchy[i].id,
+							title: this.hierarchy[i].title,
+							parent: this.hierarchy[i].parent,
+							children: children
+						};
+					}
+				});
+				this.pages = (this.pages)? this.sortFiles(this.pages) : this.pages;
+				fs.writeFileSync(`${this.dataDir}pages.json`, JSON.stringify({
+					host: this.host,
+					items: this.pages,
+					titles: this.hierarchy,
+					name: 'PAGES_LIST'
+				}));	
+				break;
+			case this.postsSelector:
+				this.posts = (this.posts)? this.sortFiles(this.posts) : this.posts;
+				fs.writeFileSync(`${this.dataDir}posts.json`, JSON.stringify({
+					host: this.host, 
+					items: this.posts,
+					name: 'POSTS_LIST'
+				}));
+				break;
+			case this.categoriesSelector:
+				this.categories = (this.categories)? this.sortFiles(this.categories) : this.categories;
+				fs.writeFileSync(`${this.dataDir}categories.json`, JSON.stringify({
+					host: this.host,
+					items: this.categories,
+					name: 'CATEGORIES_LIST'
+				}));
+				break;
+			default:
+				break;
+		}
 	}
 
 	getPages() {
