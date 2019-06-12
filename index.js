@@ -14,6 +14,7 @@ class Api {
 		this.mediaSelector = 'media';
 		this.emptyConst = 'empty';
 		this.dataDirName = '/storage/';
+		this.childCategories = [];
 		this.dataDir = `${this.rootDir}${this.dataDirName}`;
 		this.dataPostsPath = `${this.dataDir}${this.postsSelector}`;
 		this.dataPagesPath = `${this.dataDir}${this.pagesSelector}`;
@@ -125,6 +126,7 @@ class Api {
 	dataFill(selector, data) {
 		this.itemPages = [];
 		const context = this;
+		this.categoriesItems = [];
 		data.map(item => {
 			if (selector === this.postsSelector || selector === this.pagesSelector) {
 				this.itemPages = {
@@ -192,6 +194,11 @@ class Api {
 					this.pages.push(item.id);
 					break;
 				case this.postsSelector:
+					this.categoriesItems.push({
+						id: item.id,
+						title: item.title.rendered,
+						categories: item.categories
+					});
 					this.itemPages.sticky = item.sticky;
 					this.itemPages.format = item.format;
 					this.itemPages.tags = item.tags;
@@ -225,6 +232,13 @@ class Api {
 						_links: item._links,
 						error: 0
 					};
+					if (item.parent) {
+						this.childCategories.push({
+							category: item.id, 
+							parent: item.parent,
+							title: item.name
+						});
+					}
 					fs.writeFileSync(`${this.dataCategoriesPath}/category_${item.id}.json`, JSON.stringify(category));
 					this.categories.push(item.id);
 					break;
@@ -268,6 +282,7 @@ class Api {
 					host: this.host,
 					items: this.pages,
 					titles: this.hierarchy,
+					indexes: this.indexArray,
 					name: 'PAGES_LIST'
 				}));	
 				break;
@@ -279,16 +294,70 @@ class Api {
 					name: 'POSTS_LIST'
 				}));
 				break;
-			case this.categoriesSelector:
-				this.categories = (this.categories)? this.sortFiles(this.categories) : this.categories;
-				fs.writeFileSync(`${this.dataDir}categories.json`, JSON.stringify({
-					host: this.host,
-					items: this.categories,
-					name: 'CATEGORIES_LIST'
-				}));
-				break;
 			default:
 				break;
+		}
+		this.hierarhyCategories = {};
+		this.categoriesItems.map(item => {
+			this.s = this.hierarhyCategories;
+			item.categories.map((item2, index) => {
+				if (!this.s[item2]) {
+					this.s[item2] = [];
+				}
+				this.s[item2].push({
+					id: item.id,
+					title: item.title,
+					type: 'post',
+					parent: item.categories,
+					children: []
+				});
+			});
+		});
+		this.categories = (this.categories)? this.sortFiles(this.categories) : this.categories;
+		if (this.s) {
+			this.c = this.childCategories;
+			this.parents = {};
+			this.categoriesTitles = [];
+			this.c.map((item, index) => {
+				this.children = [];
+				this.childCategories.map(item2 => {
+					if (item.category === item2.parent) {
+						this.children.push(item2.category);
+					}
+				});
+				this.categoriesTitles.push({
+					id: item.category,
+					title: item.title,
+					parent: item.parent,
+					children: this.children
+				});
+			});
+			this.categoriesList = [];
+			this.categories.map(item => {
+				this.parCat = null;
+				this.categoriesTitles.map(item2 => {
+					if (item === item2.id) {
+						this.categoriesList.push({
+            id: item2.id,
+            title: item2.title,
+            parent: item2.parent,
+						children: item2.children,
+            type: 'category'
+          });
+					}
+				});
+				if (this.s[item]) {
+					this.s[item].map(item3 => {
+						this.categoriesList.push(item3);
+					});
+				}
+			})
+			fs.writeFileSync(`${this.dataDir}categories.json`, JSON.stringify({
+				host: this.host,
+				items: this.categories,
+				titles: this.categoriesList,
+				name: 'CATEGORIES_LIST'
+			}));
 		}
 	}
 
@@ -305,9 +374,9 @@ class Api {
 		});
 	}
 
-	getPosts() {
+	async getPosts() {
 		const context = this;
-		this.wp.posts().perPage(100).get(function(err, data) {
+		await this.wp.posts().perPage(100).get(function(err, data) {
 			if (err){
 				console.log(err);
 			}
