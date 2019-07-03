@@ -232,13 +232,18 @@ class Api {
 						_links: item._links,
 						error: 0
 					};
+					let parentItem;
 					if (item.parent) {
-						this.childCategories.push({
-							category: item.id, 
-							parent: item.parent,
-							title: item.name
-						});
+						parentItem = item.parent;
 					}
+					else {
+						parentItem = null;
+					}
+					this.childCategories.push({
+						category: item.id, 
+						parent: parentItem,
+						title: item.name
+					});
 					fs.writeFileSync(`${this.dataCategoriesPath}/category_${item.id}.json`, JSON.stringify(category));
 					this.categories.push(item.id);
 					break;
