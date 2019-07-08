@@ -244,7 +244,13 @@ class Api {
 						parent: parentItem,
 						title: item.name
 					});
-					fs.writeFileSync(`${this.dataCategoriesPath}/category_${item.id}.json`, JSON.stringify(category));
+					this.category = category;
+					const fileCategoryPath = `${this.dataCategoriesPath}/category_${item.id}.json`;
+					fs.lstat(fileCategoryPath, (error, stats) => {
+						if (error) {	
+							fs.writeFileSync(fileCategoryPath, JSON.stringify(category));
+						}
+					});
 					this.categories.push(item.id);
 					break;
 				default:
@@ -356,13 +362,63 @@ class Api {
 						this.categoriesList.push(item3);
 					});
 				}
-			})
+			});
 			fs.writeFileSync(`${this.dataDir}categories.json`, JSON.stringify({
 				host: this.host,
 				items: this.categories,
 				titles: this.categoriesList,
 				name: 'CATEGORIES_LIST'
 			}));
+			const dataCategoriesDir = fs.readdir(this.dataCategoriesPath, (error, items) => {
+				if (error) {
+					console.log(error)
+				}
+				items.map(item2 => {
+					let id = parseInt(item2.match(/\d+/)[0]);
+					this.dataCategory = fs.readFileSync(`${this.dataCategoriesPath}/${item2}`).toString();
+					this.dataCategory = JSON.parse(this.dataCategory);
+					this.dataCategory.posts = [];
+					this.categoriesList.map(item3 => {
+						if (item3.type === 'category' && this.dataCategory.id === item3.id) {
+							this.dataCategory.parent = item3.parent;
+							this.dataCategory.children = item3.children;
+							this.dataCategory.childTitles = [];
+							item3.children.map(itemC => {
+								this.categoriesList.map(itemC1 => {
+									if (item3.parent === itemC1.id) {
+										this.dataCategory.parentTitle = itemC1.title;
+									}
+									else {
+										this.dataCategory.parentTitle = null;
+									}
+									if (itemC === itemC1.id) {
+										this.dataCategory.childTitles.push({
+											[itemC]: itemC1.title
+										});
+									}
+								});
+							});
+						}
+						else if (item3.type === 'post' && item3.parent !== null) {
+							item3.parent.map(item4 => {
+								if (item4 === id) {
+									const dC = this.dataCategory.posts;
+									this._postFound = false;
+									dC.map(item5 => {
+										if (item5.id === item3.id) {
+											this._postFound = true;
+										}
+									});
+									if (!this._postFound) {
+										this.dataCategory.posts.push(item3);
+									}
+								}
+							});
+						}
+					});
+					fs.writeFileSync(`${this.dataCategoriesPath}/${item2}`, JSON.stringify(this.dataCategory));
+				});
+			});
 		}
 	}
 
