@@ -114,7 +114,7 @@ class Api {
 		dir = (selector === this.mediaSelector)? this.dataMediaPath : dir;
 		const postDirItems = fs.readdir(dir, (err, items) => {
 			if (err){
-				console.log(err);
+				console.error(err);
 			}
 			items.map(item => {
 				const file = `${dir}/${item}`;
@@ -371,7 +371,7 @@ class Api {
 			}));
 			const dataCategoriesDir = fs.readdir(this.dataCategoriesPath, (error, items) => {
 				if (error) {
-					console.log(error)
+					console.error(error)
 				}
 				items.map(item2 => {
 					let id = parseInt(item2.match(/\d+/)[0]);
@@ -380,24 +380,29 @@ class Api {
 					this.dataCategory.posts = [];
 					this.categoriesList.map(item3 => {
 						if (item3.type === 'category' && this.dataCategory.id === item3.id) {
-							this.dataCategory.parent = item3.parent;
 							this.dataCategory.children = item3.children;
 							this.dataCategory.childTitles = [];
+							this._saveParentTitle = false;
+							this._saveParentTitle = true;
+							const pT = this.categoriesList;
+							pT.map(itemP => {
+								if (this.dataCategory.parent === itemP.id) {
+									this.dataCategory.parentTitle = itemP.title;
+								}
+							});
 							item3.children.map(itemC => {
 								this.categoriesList.map(itemC1 => {
-									if (item3.parent === itemC1.id) {
-										this.dataCategory.parentTitle = itemC1.title;
-									}
-									else {
-										this.dataCategory.parentTitle = null;
-									}
 									if (itemC === itemC1.id) {
 										this.dataCategory.childTitles.push({
-											[itemC]: itemC1.title
+											id: itemC,
+											title: itemC1.title
 										});
 									}
 								});
 							});
+							if (!this._saveParentTitle) {
+								this.dataCategory.parentTitle = null;
+							}
 						}
 						else if (item3.type === 'post' && item3.parent !== null) {
 							item3.parent.map(item4 => {
@@ -416,9 +421,69 @@ class Api {
 							});
 						}
 					});
+					this.getLevels(this.dataCategory);
+					console.log(this.dataCategory)
 					fs.writeFileSync(`${this.dataCategoriesPath}/${item2}`, JSON.stringify(this.dataCategory));
 				});
 			});
+		}
+	}
+
+	getLevels(data) {
+		this.circles = 0;
+		this.countCategories = 0;
+		this.categoriesList.map(item => {
+			if (item.type === 'category') {
+				this.countCategories ++;
+			}
+		});
+		if (data.parent === 0) {
+			this.dataCategory.level = 1;
+		}
+		else {
+			let iCat = 0;
+			this.level = 1;
+			this.needCategory = 0;
+			while (data) {
+				const item = this.categoriesList[iCat];
+				iCat ++;
+				const categoriesLength = this.categoriesList.length;
+				iCat = (iCat === categoriesLength)? 0 : iCat;
+				if (this.level > categoriesLength) {
+					if (this.circles > categoriesLength) {
+						break;
+					}
+					this.needCategory = 0;
+					this.level = 0;
+				}
+				if (item.type === 'category') {
+					if (this.needCategory !== 0) {
+						if (this.needCategory === item.id) {
+							this.level ++;
+							if (item.parent === null) {
+								this.dataCategory.level = this.level;
+								break;
+							}
+							else {
+								this.needCategory = item.parent;
+							}
+						}
+					}
+					else {
+						if (item.parent === null && data.parent === item.id) {
+							this.level ++;
+							this.dataCategory.level = this.level;
+							break;
+						}
+						else if (data.parent === item.id) {
+							this.needCategory = item.parent;
+							this.rounds = 0;
+							this.circles ++;
+							this.level ++;
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -439,7 +504,7 @@ class Api {
 		const context = this;
 		await this.wp.posts().perPage(100).get(function(err, data) {
 			if (err){
-				console.log(err);
+				console.error(err);
 			}
 			context.posts = [];
 			context.dataFill(context.postsSelector, data);
@@ -450,7 +515,7 @@ class Api {
 		const context = this;
 		this.wp.categories().perPage(100).get(function(err, data) {
 			if (err) {
-				console.log(err);
+				console.error(err);
 			}
 			context.categories = [];
 			context.dataFill(context.categoriesSelector, data);
