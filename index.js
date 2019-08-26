@@ -1,8 +1,10 @@
-const WPAPI = require('wpapi');
-const path = require('path');
-const fs = require('fs');
-const process = require('process');
-const request = require('request');
+const WPAPI = require( 'wpapi' );
+const path = require( 'path' );
+const fs = require( 'fs' );
+const process = require( 'process' );
+const request = require( 'request' );
+const Window = require( 'window' );
+const window = new Window();
 
 class Api {
 
@@ -14,40 +16,60 @@ class Api {
 		this.mediaSelector = 'media';
 		this.emptyConst = 'empty';
 		this.dataDirName = '/storage/';
-		this.childCategories = [];
-		this.dataDir = `${this.rootDir}${this.dataDirName}`;
-		this.dataPostsPath = `${this.dataDir}${this.postsSelector}`;
-		this.dataPagesPath = `${this.dataDir}${this.pagesSelector}`;
-		this.dataCategoriesPath = `${this.dataDir}${this.categoriesSelector}`;
-		this.dataMediaPath = `${this.dataDir}${this.mediaSelector}`;
+		this.childCategories = [ ];
 		this.getArguments();
-		this.auth = (this.auth);
+		this.dataDir = `${ this.rootDir }${ this.dataDirName }`;
+		this.dataPostsPath = `${ this.dataDir }${ this.postsSelector }`;
+		this.dataPagesPath = `${ this.dataDir }${this.pagesSelector}`;
+		this.dataCategoriesPath = `${ this.dataDir }${this.categoriesSelector}`;
+		this.dataMediaPath = `${ this.dataDir }${ this.mediaSelector }`;
+		this.auth = ( this.auth );
 		this.wp = new WPAPI({
 			endpoint: `${this.host}/wp-json`,
 			username: this.user,
 			password: this.password,
 			auth: this.auth
 		});
-		this.createDirs();
-		this.clearDirs(this.postsSelector);
-		this.clearDirs(this.pagesSelector);
-		this.clearDirs(this.categoriesSelector);
-		this.getPages();
-		this.getPosts();
-		this.getCategories();
-		this.getUsers();
+		this.createDirs( );
+		this.clearDirs( this.postsSelector );
+		this.clearDirs( this.pagesSelector );
+		this.clearDirs( this.categoriesSelector );
+		this.clearDirs( this.mediaSelector );
+		this.getPages( );
+		this.getPosts( );
+		this.getCategories( );
+		this.getUsers( );
 	}
 
 	getArguments() {
 		this.hostArg = '--host';
+		this.pathArg = '--path';
 		const args = process.argv;
 		args.map((item, index, array) => {
-			const nextValue = array[index + 1];
-			this.checkArg = (nextValue !== undefined);
-			switch(item) {
+			const nextValue = array[ index + 1 ];
+			this.checkArg = ( nextValue !== undefined );
+			switch( item ) {
 				case this.hostArg: 
 					this.host = nextValue;
-					this.errorHandler(nextValue, item);
+					this.errorHandler( nextValue, item );
+					break;
+				case this.pathArg:
+					let path;
+					try {
+						path = fs.lstatSync( nextValue );
+					}
+					catch( e ) { }
+					if ( path ) {
+						if (path.isDirectory()) {
+							this.rootDir = nextValue;
+						}
+						else {
+							console.error( `Path ${ nextVale } is not directory` );
+						}
+					}
+					else {
+						console.error( `Path ${ nextValue } not found` );
+					}
 					break;
 				default:
 					break;
@@ -127,6 +149,33 @@ class Api {
 		});
 	}
 	
+	saveImages( data, type, id ) {
+		this.data = data;
+		const div = window.document.createElement( 'div' );
+		const body = window.document.querySelector( 'body' );
+		body.appendChild(div);
+		div.innerHTML = this.data;
+		this.contentImages = body.querySelectorAll( 'img' );
+		this.promisesData = [];
+		for ( let i = 0; this.contentImages[i]; i ++ ) {
+			const image = this.contentImages[i].getAttribute( 'src' );
+			const randPrefix = ( Math.random() * 100000 ).toFixed( 0 );
+			let format = image.match(/\.\w$/);
+			format = ( format ) ? format : '.png';
+			const fileName = `${ type }_${ id }_${ randPrefix }${ format }`;
+			const file = `${ this.dataMediaPath }/${ fileName }`;
+			this.data = this.data.replace( new RegExp( image, 'g' ), `/storage/media/${ fileName }` );
+			request( image, {encoding: 'binary'}, function(err, resp, b) {
+				if ( err ) {
+					console.error( err );
+				}
+				fs.writeFileSync(file, b, 'binary');
+			} );
+		}
+		this.data = this.data.replace( new RegExp( this.host, 'g' ), '' );
+		return this.data;
+	}
+
 	dataFill(selector, data) {
 		this.itemPages = [];
 		const context = this;
@@ -185,6 +234,8 @@ class Api {
 				case this.pagesSelector: 
 					this.itemPages.parent = item.parent;
 					this.itemPages.menu_order = item.menu_order;
+					this.itemPages.content = this.saveImages( this.itemPages.content, this.itemPages.type, this.itemPages.id );
+          this.itemPages.excerpt = this.saveImages( this.itemPages.excerpt, this.itemPages.type, this.itemPages.id );
 					fs.writeFileSync(`${this.dataPagesPath}/page_${item.id}.json`, JSON.stringify(this.itemPages));
 					let parent = null;
 					if (item.parent) {
@@ -207,14 +258,16 @@ class Api {
 					this.itemPages.format = item.format;
 					this.itemPages.tags = item.tags;
 					this.itemPages.categories = item.categories;
-					this.postsTitles = (this.postsTitles)? this.postsTitles : [];
-					if (item.sticky && !this.firstId) {
+					this.postsTitles = ( this.postsTitles )? this.postsTitles : [];
+					this.itemPages.excerpt = this.saveImages(this.itemPages.excerpt, this.itemPages.type, this.itemPages.id );
+					this.itemPages.content = this.saveImages(this.itemPages.content, this.itemPages.type, this.itemPages.id );
+					if ( item.sticky && !this.firstId ) {
 						this.firstId = item.id;
 						this.firstSlug = item.slug;
-						fs.writeFileSync(`${this.dataPostsPath}/post_home.json`, JSON.stringify(this.itemPages));
+						fs.writeFileSync( `${ this.dataPostsPath }/post_home.json`, JSON.stringify( this.itemPages ) );
 					}
 					else {
-						fs.writeFileSync(`${this.dataPostsPath}/post_${item.id}.json`, JSON.stringify(this.itemPages));
+						fs.writeFileSync( `${ this.dataPostsPath }/post_${ item.id }.json`, JSON.stringify( this.itemPages ) );
 						this.posts.push(item.id);
 						this.postsTitles.push({
 							id: item.id,
@@ -224,7 +277,7 @@ class Api {
 					}
 					if (item.sticky && this.firstId) {
 						if (item.id !== this.firstId) {
-							console.warn(`[Warning] Saving post witn id: <${item.id}> and slug: <${item.slug}> as home page post is ignored! Because post with id: <${this.firstId}> and slug: <${this.firstSlug}> are saved. Promotion of only one post is currently supported, and this post is home page`);
+							console.warn(`[ Warning ] Saving post witn id: <${ item.id }> and slug: <${ item.slug }> as home page post is ignored! Because post with id: <${this.firstId}> and slug: <${this.firstSlug}> are saved. Promotion of only one post is currently supported, and this post is home page`);
 						}
 					}
 					break;
@@ -255,6 +308,7 @@ class Api {
 						title: item.name
 					});
 					this.category = category;
+					this.category.description = this.saveImages( this.category.description, 'category', item.id );
 					const fileCategoryPath = `${this.dataCategoriesPath}/category_${item.id}.json`;
 					fs.lstat(fileCategoryPath, (error, stats) => {
 						if (error) {	
@@ -335,7 +389,7 @@ class Api {
 				});
 			});
 		});
-		this.categories = (this.categories)? this.sortFiles(this.categories) : this.categories;
+		this.categories = (this.categories)? this.sortFiles(this.categories) : [];
 		if (this.s) {
 			this.c = this.childCategories;
 			this.parents = {};
@@ -355,7 +409,7 @@ class Api {
 				});
 			});
 			this.categoriesList = [];
-			if (this.categories) {
+			try {
 				this.categories.map(item => {
 					this.parCat = null;
 					this.categoriesTitles.map(item2 => {
@@ -375,6 +429,9 @@ class Api {
 						});
 					}
 				});
+			}
+			catch(e) {
+				throw 'Some to wrong, restart again...'
 			}
 			this.catLevels = [];
 			const dataCategoriesDir = fs.readdir(this.dataCategoriesPath, (error, items) => {

@@ -1,6 +1,6 @@
 {
   "name": "wordpress-data",
-  "version": "0.1.13",
+  "version": "0.2.2",
   "description": "Transfer data from Wordpress to JSON files",
   "main": "index.js",
   "repository": "https://github.com/kolserdav/wordpress-data",
@@ -8,6 +8,7 @@
   "license": "MIT",
   "dependencies": {
     "request": "^2.88.0",
+    "window": "^4.2.6",
     "wpapi": "^1.2.1"
   }
 }
